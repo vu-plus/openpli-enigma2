@@ -596,7 +596,7 @@ class FallbackTimerClass(TimerObject):
 			timebegin = 0, timeend = 0, duration = 0, startprepare = 0, \
 			state = 0, repeated = 0, justplay = 0, eit = 0, afterevent = 0, \
 			dirname = "", description = "", flags = "", conflict_detection = 0):
-		self.service_ref = ServiceReference(service_ref and service_ref.rsplit(":", 1)[0] or None)
+		self.service_ref = ServiceReference(service_ref and ':'.join(service_ref.split(':')[:11]) or None)
 		self.name = name
 		self.disabled = disabled
 		self.begin = timebegin
