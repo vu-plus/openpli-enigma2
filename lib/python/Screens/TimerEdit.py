@@ -18,6 +18,7 @@ from timer import TimerEntry as RealTimerEntry
 import urllib2, xml
 from ServiceReference import ServiceReference
 from enigma import eServiceReference
+from timer import TimerEntry as TimerObject
 
 def getUrl(url):
 	print "[TimerEdit/TimerEntry] Debug getURL", url
@@ -590,7 +591,7 @@ class TimerSanityConflict(Screen):
 			self["key_yellow"].setText("")
 			self["key_blue"].setText("")
 
-class FallbackTimerClass:
+class FallbackTimerClass(TimerObject):
 	def __init__(self, service_ref = "", name = "", disabled = 0, \
 			timebegin = 0, timeend = 0, duration = 0, startprepare = 0, \
 			state = 0, repeated = 0, justplay = 0, eit = 0, afterevent = 0, \
@@ -621,12 +622,3 @@ class FallbackTimerClass:
 		self.descramble = True
 		self.tags = []
 		self.repeatedbegindate = timebegin
-
-	def isRunning(self):
-		return self.state == 2
-
-	def resetRepeated(self):
-		self.repeated = 0
-
-	def setRepeated(self, day):
-		self.repeated |= (2 ** day)
