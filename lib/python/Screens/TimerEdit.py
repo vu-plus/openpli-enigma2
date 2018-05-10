@@ -13,17 +13,11 @@ from Screens.InputBox import PinInput
 from ServiceReference import ServiceReference
 from TimerEntry import TimerEntry, TimerLog
 from Tools.BoundFunction import boundFunction
+from Tools.FallbackTimer import FallbackTimerList
 from time import time
 from timer import TimerEntry as RealTimerEntry
-import urllib2, xml
 from ServiceReference import ServiceReference
 from enigma import eServiceReference
-from timer import TimerEntry as TimerObject
-
-def getUrl(url):
-	print "[TimerEdit/TimerEntry] Debug getURL", url
-	from twisted.web.client import getPage
-	return getPage(url, headers={})
 
 class TimerEditList(Screen):
 	EMPTY = 0
@@ -105,8 +99,7 @@ class TimerEditList(Screen):
 		if cur:
 			t = cur
 			if t.external:
-				url = "%s/web/timertogglestatus?sRef=%s&begin=%s&end=%s" % (self.url, t.service_ref, t.begin, t.end)
-				getUrl(url).addCallback(self.refill).addErrback(self.errorLoad)
+				self.fallbackTimer.toggleTimer(t, self.refill)
 			else:
 				stateRunning = t.state in (1, 2)
 				if t.disabled and t.repeated and stateRunning and not t.justplay:
@@ -220,53 +213,15 @@ class TimerEditList(Screen):
 			self.key_blue_choice = self.EMPTY
 
 	def fillTimerList(self):
-		self.list = []
-		if config.usage.remote_fallback_enabled.value and config.usage.remote_fallback_external_timer.value and config.usage.remote_fallback.value:
-			try:
-				self.url = config.usage.remote_fallback.value.rsplit(":", 1)[0]
-				url = "%s/web/timerlist" % (self.url)
-				getUrl(url).addCallback(self.gotRemoteTimerList).addErrback(self.errorRemoteTimerList)
-				return
-			except:
-				print "##### TODO: Consider to add a notification when fetching remote timer list was not succesfull"
-		self.createTimerList()
+		self.fallbackTimer = FallbackTimerList()
+		self.fallbackTimer.getFallbackTimerList(self.createTimerList)
 
-	def errorRemoteTimerList(self, error):
-		print "##### TODO: Consider to add a notification when fetching remote timer list was not succesfull"
-
-	def gotRemoteTimerList(self, data):
-		try:
-			root = xml.etree.cElementTree.fromstring(data)
-		except Exception, e:
-			print "[RemoteTimer] error: %s", e
+	def createTimerList(self, answer, message):
+		if answer:
+			self.list = self.fallbackTimer.list
 		else:
-			self.list = [
-				(
-					FallbackTimerClass(
-						service_ref = str(timer.findtext("e2servicereference", '').encode("utf-8", 'ignore')),
-						name = str(timer.findtext("e2name", '').encode("utf-8", 'ignore')),
-						disabled = int(timer.findtext("e2disabled", 0)),
-						timebegin = int(timer.findtext("e2timebegin", 0)),
-						timeend = int(timer.findtext("e2timeend", 0)),
-						duration = int(timer.findtext("e2duration", 0)),
-						startprepare = int(timer.findtext("e2startprepare", 0)),
-						state = int(timer.findtext("e2state", 0)),
-						repeated = int(timer.findtext("e2repeated", 0)),
-						justplay = int(timer.findtext("e2justplay", 0)),
-						eit = int(timer.findtext("e2eit", -1)),
-						afterevent = int(timer.findtext("e2afterevent", 0)),
-						dirname = str(timer.findtext("e2dirname", '').encode("utf-8", 'ignore')),
-						description = str(timer.findtext("e2description", '').encode("utf-8", 'ignore')),
-						flags = "",
-						conflict_detection = 0
-					),
-					int(timer.findtext("e2state", 0)) == 3
-				)
-				for timer in root.findall("e2timer")
-			]
-		self.createTimerList()
-
-	def createTimerList(self):
+			self.list = []
+			print "[TimerEdit] Something went wrong while fetching fallback timer", message
 
 		def eol_compare(x, y):
 			if x[0].state != y[0].state and x[0].state == RealTimerEntry.StateEnded or y[0].state == RealTimerEntry.StateEnded:
@@ -291,7 +246,7 @@ class TimerEditList(Screen):
 	def openEdit(self):
 		cur=self["timerlist"].getCurrent()
 		if cur:
-			self.session.openWithCallback(self.finishedEdit, TimerEntry, cur, True)
+			self.session.openWithCallback(boundFunction(self.finishedEdit, cur.service_ref, cur.begin, cur.end), TimerEntry, cur, True)
 
 	def cleanupQuestion(self):
 		self.session.openWithCallback(self.cleanupTimer, MessageBox, _("Really delete done timers?"))
@@ -299,14 +254,7 @@ class TimerEditList(Screen):
 	def cleanupTimer(self, delete):
 		if delete:
 			self.session.nav.RecordTimer.cleanup()
-			if self.url:
-				try:
-					url = "%s/web/timercleanup?cleanup=true" % (self.url)
-					getUrl(url).addCallback(self.refill).addErrback(self.errorLoad)
-				except:
-					print "[RemoteTimer] ERROR Cleanup fallback tuner"
-			else:
-				self.refill()
+			self.fallbackTimer.cleanupTimers(self.refill)
 
 	def removeTimerQuestion(self):
 		cur = self["timerlist"].getCurrent()
@@ -319,32 +267,27 @@ class TimerEditList(Screen):
 			if cur:
 				print cur
 				if cur.external:
-					url = "%s/web/timerdelete?sRef=%s&begin=%s&end=%s" % (self.url, cur.service_ref, cur.begin, cur.end)
-					getUrl(url).addCallback(self.refill).addErrback(self.errorLoad)
+					self.fallbackTimer.removeTimer(cur, self.refill)
 				else:
 					timer = cur
 					timer.afterEvent = AFTEREVENT.NONE
 					self.session.nav.RecordTimer.removeEntry(timer)
 					self.refill()
 
-	def errorLoad(self, *args):
-		print "(errorLoad) ##### TODO: Add notification when clean/remove was not succesfull"
-		print args
-
-	def refill(self, *args):
-		if args:
-			print "##### TODO: Add notification when clean/remove was not succesfull"
-			print args
-		oldsize = len(self.list)
-		self.fillTimerList()
-		lst = self["timerlist"]
-		newsize = len(self.list)
-		if oldsize and oldsize != newsize:
-			idx = lst.getCurrentIndex()
-			lst.entryRemoved(idx)
+	def refill(self, answer=True, message=""):
+		if answer:
+			oldsize = len(self.list)
+			self.fillTimerList()
+			lst = self["timerlist"]
+			newsize = len(self.list)
+			if oldsize and oldsize != newsize:
+				idx = lst.getCurrentIndex()
+				lst.entryRemoved(idx)
+			else:
+				lst.invalidate()
+			self.updateState()
 		else:
-			lst.invalidate()
-		self.updateState()
+			print "[TimerEdit] Error fetching fallback timer", message
 
 	def addCurrentTimer(self):
 		event = None
@@ -367,44 +310,50 @@ class TimerEditList(Screen):
 	def addTimer(self, timer):
 		self.session.openWithCallback(self.finishedAdd, TimerEntry, timer)
 
-	def finishedEdit(self, answer):
+	def finishedEdit(self, service_ref, begin, end, answer):
 		print "[TimerEditList] finished edit"
 		if answer[0]:
 			entry = answer[1]
-			timersanitycheck = TimerSanityCheck(self.session.nav.RecordTimer.timer_list, entry)
-			success = False
-			if not timersanitycheck.check():
-				simulTimerList = timersanitycheck.getSimulTimerList()
-				if simulTimerList is not None:
-					for x in simulTimerList:
-						if x.setAutoincreaseEnd(entry):
-							self.session.nav.RecordTimer.timeChanged(x)
-					if not timersanitycheck.check():
-						simulTimerList = timersanitycheck.getSimulTimerList()
-						if simulTimerList is not None:
-							self.session.openWithCallback(self.finishedEdit, TimerSanityConflict, timersanitycheck.getSimulTimerList())
-					else:
-						success = True
+			if entry.external:
+				self.fallbackTimer.editTimer(service_ref, begin, end, entry, self.refill)
 			else:
-				success = True
-			if success:
-				print "[TimerEditList] sanity check passed"
-				self.session.nav.RecordTimer.timeChanged(entry)
-		self.fillTimerList()
+				timersanitycheck = TimerSanityCheck(self.session.nav.RecordTimer.timer_list, entry)
+				success = False
+				if not timersanitycheck.check():
+					simulTimerList = timersanitycheck.getSimulTimerList()
+					if simulTimerList is not None:
+						for x in simulTimerList:
+							if x.setAutoincreaseEnd(entry):
+								self.session.nav.RecordTimer.timeChanged(x)
+						if not timersanitycheck.check():
+							simulTimerList = timersanitycheck.getSimulTimerList()
+							if simulTimerList is not None:
+								self.session.openWithCallback(self.finishedEdit, TimerSanityConflict, timersanitycheck.getSimulTimerList())
+						else:
+							success = True
+				else:
+					success = True
+				if success:
+					print "[TimerEditList] sanity check passed"
+					self.session.nav.RecordTimer.timeChanged(entry)
+			self.fillTimerList()
 
 	def finishedAdd(self, answer):
 		print "[TimerEditList] finished add"
 		if answer[0]:
 			entry = answer[1]
-			simulTimerList = self.session.nav.RecordTimer.record(entry)
-			if simulTimerList is not None:
-				for x in simulTimerList:
-					if x.setAutoincreaseEnd(entry):
-						self.session.nav.RecordTimer.timeChanged(x)
+			if entry.external:
+				self.fallbackTimer.addTimer(entry, self.refill)
+			else:
 				simulTimerList = self.session.nav.RecordTimer.record(entry)
 				if simulTimerList is not None:
-					self.session.openWithCallback(self.finishSanityCorrection, TimerSanityConflict, simulTimerList)
-		self.fillTimerList()
+					for x in simulTimerList:
+						if x.setAutoincreaseEnd(entry):
+							self.session.nav.RecordTimer.timeChanged(x)
+					simulTimerList = self.session.nav.RecordTimer.record(entry)
+					if simulTimerList is not None:
+						self.session.openWithCallback(self.finishSanityCorrection, TimerSanityConflict, simulTimerList)
+			self.fillTimerList()
 
 	def finishSanityCorrection(self, answer):
 		self.finishedAdd(answer)
@@ -590,35 +539,3 @@ class TimerSanityConflict(Screen):
 			self["key_green"].setText("")
 			self["key_yellow"].setText("")
 			self["key_blue"].setText("")
-
-class FallbackTimerClass(TimerObject):
-	def __init__(self, service_ref = "", name = "", disabled = 0, \
-			timebegin = 0, timeend = 0, duration = 0, startprepare = 0, \
-			state = 0, repeated = 0, justplay = 0, eit = 0, afterevent = 0, \
-			dirname = "", description = "", flags = "", conflict_detection = 0):
-		self.service_ref = ServiceReference(service_ref and ':'.join(service_ref.split(':')[:11]) or None)
-		self.name = name
-		self.disabled = disabled
-		self.begin = timebegin
-		self.end = timeend
-		self.duration = duration
-		self.startprepare = startprepare
-		self.state = state
-		self.repeated = repeated
-		self.justplay = justplay
-		self.eit = eit
-		self.afterEvent = afterevent
-		self.dirname = dirname
-		self.description = description
-		self.flags = flags
-		self.conflict_detection = conflict_detection
-
-		self.external = True
-		self.always_zap = False
-		self.zap_wakeup = False
-		self.pipzap = False
-		self.rename_repeat = False
-		self.record_ecm = False
-		self.descramble = True
-		self.tags = []
-		self.repeatedbegindate = timebegin

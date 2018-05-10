@@ -17,6 +17,7 @@ from Screens.ChoiceBox import ChoiceBox
 from Screens.MessageBox import MessageBox
 from Screens.VirtualKeyBoard import VirtualKeyBoard
 from Tools.Alternatives import GetWithAlternative
+from Tools.FallbackTimer import FallbackTimerList
 from RecordTimer import AFTEREVENT
 from enigma import eEPGCache
 from time import localtime, mktime, time, strftime
@@ -474,45 +475,8 @@ class TimerEntry(Screen, ConfigListScreen):
 					elif n > 0:
 						parent = self.timer.service_ref.ref
 						self.timer.service_ref = ServiceReference(event.getLinkageService(parent, 0))
-			if self.timerentry_fallback.value:
-				if self.edit:
-					url = "%s/web/timerchange?sRef=%s&begin=%s&end=%s&name=%s&description=%s&disabled=%s&justplay=%s&afterevent=%s&repeated=%s&channelOld=%s&beginOld=%s&endOld=%s&dirname=%s&eit=%s" % (
-						config.usage.remote_fallback.value.rsplit(":", 1)[0],
-						self.timer.service_ref,
-						self.timer.begin,
-						self.timer.end,
-						urllib.quote(self.timer.name.decode('utf8').encode('utf8','ignore')),
-						urllib.quote(self.timer.description.decode('utf8').encode('utf8','ignore')),
-						self.timer.disabled,
-						self.timer.justplay,
-						self.timer.afterEvent,
-						self.timer.repeated,
-						self.service_ref_prev,
-						self.begin_prev,
-						self.end_prev,
-						None,
-						self.timer.eit or 0,
-					)
-				else:
-					url = "%s/web/timeradd?sRef=%s&begin=%s&end=%s&name=%s&description=%s&disabled=%s&justplay=%s&afterevent=%s&repeated=%s&dirname=%s&eit=%s" % (
-						config.usage.remote_fallback.value.rsplit(":", 1)[0],
-						self.timer.service_ref,
-						self.timer.begin,
-						self.timer.end,
-						urllib.quote(self.timer.name.decode('utf8').encode('utf8','ignore')),
-						urllib.quote(self.timer.description.decode('utf8').encode('utf8','ignore')),
-						self.timer.disabled,
-						self.timer.justplay,
-						self.timer.afterEvent,
-						self.timer.repeated,
-						None,
-						self.timer.eit or 0,
-					)
-				from Screens.TimerEdit import getUrl
-				getUrl(url).addCallback(self.keyCancel).addErrback(self.keyCancel)
-			else:
-				self.saveTimer()
-				self.close((True, self.timer))
+			self.saveTimer()
+			self.close((True, self.timer))
 
 	def changeTimerType(self):
 		self.timerentry_justplay.selectNext()
@@ -558,9 +522,11 @@ class TimerEntry(Screen, ConfigListScreen):
 	def saveTimer(self):
 		self.session.nav.RecordTimer.saveTimer()
 
-	def keyCancel(self, *args):
-		print "[TimerEntry] keyCancel handle also here success fallback timer message", args
-		self.close((False,))
+	def keyCancel(self, answer=True, message=""):
+		if answer:
+			self.close((False,))
+		else:
+			print "[TimerEntry] keyCancel something went wrong with fallback timer", message
 
 	def pathSelected(self, res):
 		if res is not None:
