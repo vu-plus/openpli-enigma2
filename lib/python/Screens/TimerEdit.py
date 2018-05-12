@@ -265,7 +265,6 @@ class TimerEditList(Screen):
 		if result:
 			cur = self["timerlist"].getCurrent()
 			if cur:
-				print cur
 				if cur.external:
 					self.fallbackTimer.removeTimer(cur, self.refill)
 				else:
@@ -328,7 +327,7 @@ class TimerEditList(Screen):
 						if not timersanitycheck.check():
 							simulTimerList = timersanitycheck.getSimulTimerList()
 							if simulTimerList is not None:
-								self.session.openWithCallback(self.finishedEdit, TimerSanityConflict, timersanitycheck.getSimulTimerList())
+								self.session.openWithCallback(boundFunction(self.finishedEdit, service_ref, begin, end), TimerSanityConflict, timersanitycheck.getSimulTimerList())
 						else:
 							success = True
 				else:

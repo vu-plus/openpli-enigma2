@@ -742,6 +742,7 @@ class RecordTimer(timer.Timer):
 		timer.Timer.__init__(self)
 
 		self.Filename = Directories.resolveFilename(Directories.SCOPE_CONFIG, "timers.xml")
+		self.fallback_timer_list = []
 
 		try:
 			self.loadTimer()
@@ -1108,6 +1109,12 @@ class RecordTimer(timer.Timer):
 					is_editable = True
 		return time_match and is_editable
 
+	def setFallbackTimerList(self, list):
+		self.fallback_timer_list = [x[0] for x in list if not x[1]]
+
+	def getAllTimersList(self):
+		return self.timer_list + self.fallback_timer_list
+
 	def isInTimer(self, eventid, begin, duration, service):
 		returnValue = None
 		type = 0
@@ -1116,7 +1123,7 @@ class RecordTimer(timer.Timer):
 		check_offset_time = not config.recording.margin_before.value and not config.recording.margin_after.value
 		end = begin + duration
 		refstr = ':'.join(service.split(':')[:11])
-		for x in self.timer_list:
+		for x in self.getAllTimersList():
 			check = ':'.join(x.service_ref.ref.toString().split(':')[:11]) == refstr
 			if not check:
 				sref = x.service_ref.ref

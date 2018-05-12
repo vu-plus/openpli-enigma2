@@ -17,10 +17,9 @@ class FallbackTimerList():
 		from twisted.web.client import getPage
 		return getPage("%s/%s" % (self.url, url), headers={})
 
-	def getFallbackTimerList(self, fallbackFunction=None, collectAll=True):
+	def getFallbackTimerList(self, fallbackFunction=None):
 		self.list = []
 		self.fallbackFunction = fallbackFunction
-		self.collectAll = collectAll
 		if self.url:
 			if True:#try:
 				self.getUrl("web/timerlist").addCallback(self.gotFallbackTimerList).addErrback(self.errorUrlFallback)
@@ -56,7 +55,7 @@ class FallbackTimerList():
 				),
 				int(timer.findtext("e2state", 0)) == 3
 			)
-			for timer in root.findall("e2timer") if self.collectAll or int(timer.findtext("e2state", 0)) == 3 
+			for timer in root.findall("e2timer")
 		]
 		self.fallback(True)
 		
