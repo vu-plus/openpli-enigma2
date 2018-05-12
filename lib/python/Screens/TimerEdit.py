@@ -58,12 +58,11 @@ class TimerEditList(Screen):
 			}, -1)
 		self.setTitle(_("Timer overview"))
 
-		self.fillTimerList()
-
 		self.session.nav.RecordTimer.on_state_change.append(self.onStateChange)
 		self.onShown.append(self.updateState)
 		if self.isProtected() and config.ParentalControl.servicepin[0].value:
 			self.onFirstExecBegin.append(boundFunction(self.session.openWithCallback, self.pinEntered, PinInput, pinList=[x.value for x in config.ParentalControl.servicepin], triesEntry=config.ParentalControl.retries.servicepin, title=_("Please enter the correct pin code"), windowTitle=_("Enter pin code")))
+		self.fallbackTimer = FallbackTimerList(session, self.fillTimerList)
 
 	def isProtected(self):
 		return config.ParentalControl.setuppinactive.value and (not config.ParentalControl.config_sections.main_menu.value or hasattr(self.session, 'infobar') and self.session.infobar is None) and config.ParentalControl.config_sections.timer_menu.value
@@ -212,15 +211,12 @@ class TimerEditList(Screen):
 			self["key_blue"].setText("")
 			self.key_blue_choice = self.EMPTY
 
-	def fillTimerList(self):
-		self.fallbackTimer = FallbackTimerList()
-		self.fallbackTimer.getFallbackTimerList(self.createTimerList)
-
-	def createTimerList(self, answer, message):
+	def fillTimerList(self, answer=True, message=""):
+		self.list = []
 		if answer:
-			self.list = self.fallbackTimer.list
+			self.list.extend([(timer, False) for timer in self.fallbackTimer.list if timer.state == 3])
+			self.list.extend([(timer, True) for timer in self.fallbackTimer.list if timer.state != 3])
 		else:
-			self.list = []
 			print "[TimerEdit] Something went wrong while fetching fallback timer", message
 
 		def eol_compare(x, y):

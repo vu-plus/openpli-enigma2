@@ -1110,7 +1110,7 @@ class RecordTimer(timer.Timer):
 		return time_match and is_editable
 
 	def setFallbackTimerList(self, list):
-		self.fallback_timer_list = [x[0] for x in list if not x[1]]
+		self.fallback_timer_list = [timer for timer in list if timer.state != 3]
 
 	def getAllTimersList(self):
 		return self.timer_list + self.fallback_timer_list

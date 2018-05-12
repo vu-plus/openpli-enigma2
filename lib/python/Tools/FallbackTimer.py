@@ -6,24 +6,26 @@ import xml
 
 class FallbackTimerList():
 
-	def __init__(self):
+	def __init__(self, session, fallbackFunction=None):
+		self.session = session
+		self.fallbackFunction = fallbackFunction
 		if config.usage.remote_fallback_enabled.value and config.usage.remote_fallback_external_timer.value and config.usage.remote_fallback.value:
 			self.url = config.usage.remote_fallback.value.rsplit(":", 1)[0]
 		else:
 			self.url = None
+		self.getFallbackTimerList()
 
 	def getUrl(self, url):
 		print "[FallbackTimer] getURL", url
 		from twisted.web.client import getPage
 		return getPage("%s/%s" % (self.url, url), headers={})
 
-	def getFallbackTimerList(self, fallbackFunction=None):
+	def getFallbackTimerList(self):
 		self.list = []
-		self.fallbackFunction = fallbackFunction
 		if self.url:
-			if True:#try:
+			try:
 				self.getUrl("web/timerlist").addCallback(self.gotFallbackTimerList).addErrback(self.errorUrlFallback)
-			else:#except:
+			except:
 				self.errorUrlFallback(_("Unexpected error while retreiving fallback tuner's timer information"))
 		else:		
 			self.fallback(True)
@@ -34,7 +36,6 @@ class FallbackTimerList():
 		except Exception, e:
 			self.fallback(False, e)
 		self.list = [
-			(
 				FallbackTimerClass(
 					service_ref = str(timer.findtext("e2servicereference", '').encode("utf-8", 'ignore')),
 					name = str(timer.findtext("e2name", '').encode("utf-8", 'ignore')),
@@ -51,12 +52,11 @@ class FallbackTimerList():
 					dirname = str(timer.findtext("e2dirname", '').encode("utf-8", 'ignore')),
 					description = str(timer.findtext("e2description", '').encode("utf-8", 'ignore')),
 					flags = "",
-					conflict_detection = 0
-				),
-				int(timer.findtext("e2state", 0)) == 3
-			)
+					conflict_detection = 0)
 			for timer in root.findall("e2timer")
 		]
+		print "[FallbackTimer] read %s timers from fallback tuner" % len(self.list)
+		self.session.nav.RecordTimer.setFallbackTimerList(self.list)
 		self.fallback(True)
 		
 	def removeTimer(self, timer, fallbackFunction):
@@ -116,7 +116,7 @@ class FallbackTimerList():
 		try:
 			root = xml.etree.cElementTree.fromstring(data)
 			if root[0].text == 'True':
-				self.fallback(True)
+				self.getFallbackTimerList()
 			else:
 				self.fallback(False, root[1].text)
 		except:
