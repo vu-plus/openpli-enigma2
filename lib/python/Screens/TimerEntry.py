@@ -30,9 +30,10 @@ class TimerEntry(Screen, ConfigListScreen):
 		self.timer = timer
 
 		self.edit = edit
-		self.service_ref_prev = self.timer.service_ref
-		self.begin_prev = self.timer.begin
-		self.end_prev = self.timer.end
+		self.timer.service_ref_prev = self.timer.service_ref
+		self.timer.begin_prev = self.timer.begin
+		self.timer.end_prev = self.timer.end
+		self.timer.external_prev = self.timer.external
 
 		self.entryDate = None
 		self.entryService = None
@@ -522,11 +523,8 @@ class TimerEntry(Screen, ConfigListScreen):
 	def saveTimer(self):
 		self.session.nav.RecordTimer.saveTimer()
 
-	def keyCancel(self, answer=True, message=""):
-		if answer:
-			self.close((False,))
-		else:
-			print "[TimerEntry] keyCancel something went wrong with fallback timer", message
+	def keyCancel(self):
+		self.close((False,))
 
 	def pathSelected(self, res):
 		if res is not None:

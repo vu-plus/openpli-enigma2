@@ -102,7 +102,11 @@ class EPGSelection(Screen):
 				"preview": self.eventPreview,
 			})
 		self["actions"].csel = self
-		self.onLayoutFinish.append(self.onCreate)
+		if parent and hasattr(parent, "fallbackTimer"):
+			self.fallbackTimer = parent.fallbackTimer
+			self.onLayoutFinish.append(self.onCreate)
+		else:
+			FallbackTimerList(self, self.onCreate)
 
 	def nextBouquet(self):
 		if self.type == EPG_TYPE_SINGLE:
@@ -289,10 +293,13 @@ class EPGSelection(Screen):
 			self.setService(ServiceReference(serviceref))
 
 	def removeTimer(self, timer):
-		timer.afterEvent = AFTEREVENT.NONE
-		self.session.nav.RecordTimer.removeEntry(timer)
-		self["key_green"].setText(_("Add timer"))
-		self.key_green_choice = self.ADD_TIMER
+		if timer.external:
+			self.fallbackTimer.removeTimer(timer, self.onSelectionChanged)
+		else:
+			timer.afterEvent = AFTEREVENT.NONE
+			self.session.nav.RecordTimer.removeEntry(timer)
+			self["key_green"].setText(_("Add timer"))
+			self.key_green_choice = self.ADD_TIMER
 
 	def disableTimer(self, timer, state, repeat=False, record=False):
 		if repeat:
@@ -306,10 +313,13 @@ class EPGSelection(Screen):
 				menu = [(_("Disable current event but not coming events"), "nextonlystop"),(_("Disable timer"), "simplestop")]
 			self.session.openWithCallback(boundFunction(self.runningEventCallback, timer, state), ChoiceBox, title=title_text, list=menu)
 		elif timer.state == state:
-			timer.disable()
-			self.session.nav.RecordTimer.timeChanged(timer)
-			self["key_green"].setText(_("Add timer"))
-			self.key_green_choice = self.ADD_TIMER
+			if timer.external:
+				self.fallbackTimer.toggleTimer(timer, self.onSelectionChanged)
+			else:
+				timer.disable()
+				self.session.nav.RecordTimer.timeChanged(timer)
+				self["key_green"].setText(_("Add timer"))
+				self.key_green_choice = self.ADD_TIMER
 
 	def runningEventCallback(self, t, state, result):
 		if result is not None and t.state == state:
@@ -392,63 +402,79 @@ class EPGSelection(Screen):
 			newEntry = RecordTimerEntry(serviceref, checkOldTimers = True, dirname = preferredTimerPath(), *parseEvent(event))
 			self.session.openWithCallback(self.finishedAdd, TimerEntry, newEntry)
 
-	def finishedEdit(self, answer=None):
+	def finishedEdit(self, answer):
 		if answer[0]:
 			entry = answer[1]
-			simulTimerList = self.session.nav.RecordTimer.record(entry)
-			if simulTimerList is not None:
-				for x in simulTimerList:
-					if x.setAutoincreaseEnd(entry):
-						self.session.nav.RecordTimer.timeChanged(x)
+			if entry.external_prev != entry.external:
+				if entry.external:
+					self.fallbackTimer.addTimer(entry, boundFunction(self.removeTimer, entry), self.refill)
+				else:
+					newentry = RecordTimerEntry(entry.serviceref, entry.begin, entry.end, entry.name, entry.description,\
+						entry.eit, entry.disabled, entry.justplay, entry.afterevent, dirname = entry.dirname, entry.external = False\
+						tags = entry.tags, descramble = entry.descramble, record_ecm = entry.record_ecm, always_zap = entry.always_zap,\
+						zap_wakeup = entry.zap_wakeup, rename_repeat = entry.rename_repeat, conflict_detection = entry.conflict_detection,\
+						pipzap = entry.pipzap)
+					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedAdd, (True, newentry)), self.refill)	
+			elif entry.external:
+				self.fallbackTimer.editTimer(entry, self.onSelectionChanged)
+			else:
 				simulTimerList = self.session.nav.RecordTimer.record(entry)
 				if simulTimerList is not None:
-					self.session.openWithCallback(self.finishedEdit, TimerSanityConflict, simulTimerList)
-					return
-				else:
-					self.session.nav.RecordTimer.timeChanged(entry)
-		self.onSelectionChanged()
+					for x in simulTimerList:
+						if x.setAutoincreaseEnd(entry):
+							self.session.nav.RecordTimer.timeChanged(x)
+					simulTimerList = self.session.nav.RecordTimer.record(entry)
+					if simulTimerList is not None:
+						self.session.openWithCallback(boundFunction(self.finishedEdit, service_ref, begin, end), TimerSanityConflict, simulTimerList)
+						return
+					else:
+						self.session.nav.RecordTimer.timeChanged(entry)
+				self.onSelectionChanged()
 
-	def finishedAdd(self, answer):
+	def finishedTimerAdd(self, answer):
 		print "finished add"
 		if answer[0]:
 			entry = answer[1]
-			simulTimerList = self.session.nav.RecordTimer.record(entry)
-			if simulTimerList is not None:
-				for x in simulTimerList:
-					if x.setAutoincreaseEnd(entry):
-						self.session.nav.RecordTimer.timeChanged(x)
+			if entry.external:
+				self.fallbackTimer.addTimer(entry, self.onSelectionChanged)
+			else:
 				simulTimerList = self.session.nav.RecordTimer.record(entry)
 				if simulTimerList is not None:
-					if not entry.repeated and not config.recording.margin_before.value and not config.recording.margin_after.value and len(simulTimerList) > 1:
-						change_time = False
-						conflict_begin = simulTimerList[1].begin
-						conflict_end = simulTimerList[1].end
-						if conflict_begin == entry.end:
-							entry.end -= 30
-							change_time = True
-						elif entry.begin == conflict_end:
-							entry.begin += 30
-							change_time = True
-						elif entry.begin == conflict_begin and (entry.service_ref and entry.service_ref.ref and entry.service_ref.ref.flags & eServiceReference.isGroup):
-							entry.begin += 30
-							change_time = True
-						if change_time:
-							simulTimerList = self.session.nav.RecordTimer.record(entry)
+					for x in simulTimerList:
+						if x.setAutoincreaseEnd(entry):
+							self.session.nav.RecordTimer.timeChanged(x)
+					simulTimerList = self.session.nav.RecordTimer.record(entry)
 					if simulTimerList is not None:
-						self.session.openWithCallback(self.finishSanityCorrection, TimerSanityConflict, simulTimerList)
-						return
-			cur = self["list"].getCurrent()
-			event = cur and cur[0]
-			if event:
-				begin = event.getBeginTime()
-				end = begin + event.getDuration()
-				if begin < entry.begin <= end or entry.begin <= begin <= entry.end:
-					self["key_green"].setText(_("Change timer"))
-					self.key_green_choice = self.REMOVE_TIMER
-		else:
-			self["key_green"].setText(_("Add timer"))
-			self.key_green_choice = self.ADD_TIMER
-			print "Timeredit aborted"
+						if not entry.repeated and not config.recording.margin_before.value and not config.recording.margin_after.value and len(simulTimerList) > 1:
+							change_time = False
+							conflict_begin = simulTimerList[1].begin
+							conflict_end = simulTimerList[1].end
+							if conflict_begin == entry.end:
+								entry.end -= 30
+								change_time = True
+							elif entry.begin == conflict_end:
+								entry.begin += 30
+								change_time = True
+							elif entry.begin == conflict_begin and (entry.service_ref and entry.service_ref.ref and entry.service_ref.ref.flags & eServiceReference.isGroup):
+								entry.begin += 30
+								change_time = True
+							if change_time:
+								simulTimerList = self.session.nav.RecordTimer.record(entry)
+						if simulTimerList is not None:
+							self.session.openWithCallback(self.finishSanityCorrection, TimerSanityConflict, simulTimerList)
+							return
+				cur = self["list"].getCurrent()
+				event = cur and cur[0]
+				if event:
+					begin = event.getBeginTime()
+					end = begin + event.getDuration()
+					if begin < entry.begin <= end or entry.begin <= begin <= entry.end:
+						self["key_green"].setText(_("Change timer"))
+						self.key_green_choice = self.REMOVE_TIMER
+				else:
+					self["key_green"].setText(_("Add timer"))
+					self.key_green_choice = self.ADD_TIMER
+					print "Timeredit aborted"
 
 	def finishSanityCorrection(self, answer):
 		self.finishedAdd(answer)

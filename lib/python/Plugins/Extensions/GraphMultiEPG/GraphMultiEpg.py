@@ -928,7 +928,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 		self.updateTimelineTimer.start(60 * 1000)
 		self.onLayoutFinish.append(self.onCreate)
 		self.previousref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
-		self.fallbackTimer = FallbackTimerList(session, self.onCreate)
+		self.fallbackTimer = FallbackTimerList(self, self.onCreate)
 
 	def prevPage(self):
 		self.showhideWindow(True)
@@ -1172,9 +1172,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 		l.setCurrentlyPlaying(Screens.InfoBar.InfoBar.instance.servicelist.getCurrentSelection())
 		self.moveTimeLines()
 
-	def onCreate(self, answer=True, message=""):
-		if not answer:
-			print "[GMEPG] Something went wrong while fetching the remote timer", message
+	def onCreate(self):
 		self.serviceref = self.serviceref or Screens.InfoBar.InfoBar.instance.servicelist.getCurrentSelection()
 		l = self["list"]
 		l.setShowServiceMode(config.misc.graph_mepg.servicetitle_mode.value)
@@ -1326,7 +1324,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 					if choice[1] == "delete":
 						self.removeTimer(timer)
 					elif choice[1] == "edit":
-						self.session.openWithCallback(boundFunction(self.finishedEdit, timer.service_ref, timer.begin, timer.end), TimerEntry, timer, edit=True)
+						self.session.openWithCallback(self.finishedEdit, TimerEntry, timer, edit=True)
 					elif choice[1] == "disable":
 						self.disableTimer(timer, prev_state)
 					elif choice[1] == "timereditlist":
@@ -1340,11 +1338,21 @@ class GraphMultiEPG(Screen, HelpableScreen):
 			newEntry = RecordTimerEntry(serviceref, checkOldTimers = True, *parseEvent(event))
 			self.session.openWithCallback(self.finishedTimerAdd, TimerEntry, newEntry)
 
-	def finishedEdit(self, service_ref, begin, end, answer=None):
+	def finishedEdit(self, answer=None):
 		if answer[0]:
 			entry = answer[1]
-			if entry.external:
-				self.fallbackTimer.editTimer(service_ref, begin, end, entry, self.onSelectionChanged)
+			if entry.external_prev != entry.external:
+				if entry.external:
+					self.fallbackTimer.addTimer(entry, boundFunction(self.removeTimer, entry), self.refill)
+				else:
+					newentry = RecordTimerEntry(entry.serviceref, entry.begin, entry.end, entry.name, entry.description,\
+						entry.eit, entry.disabled, entry.justplay, entry.afterevent, dirname = entry.dirname, entry.external = False\
+						tags = entry.tags, descramble = entry.descramble, record_ecm = entry.record_ecm, always_zap = entry.always_zap,\
+						zap_wakeup = entry.zap_wakeup, rename_repeat = entry.rename_repeat, conflict_detection = entry.conflict_detection,\
+						pipzap = entry.pipzap)
+					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedAdd, (True, newentry)), self.refill)	
+			elif entry.external:
+				self.fallbackTimer.editTimer(entry, self.onSelectionChanged)
 			else:
 				simulTimerList = self.session.nav.RecordTimer.record(entry)
 				if simulTimerList is not None:
@@ -1357,7 +1365,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 						return
 					else:
 						self.session.nav.RecordTimer.timeChanged(entry)
-			self.onSelectionChanged()
+				self.onSelectionChanged()
 
 	def finishedTimerAdd(self, answer):
 		print "finished add"
@@ -1407,9 +1415,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 	def finishSanityCorrection(self, answer):
 		self.finishedTimerAdd(answer)
 
-	def onSelectionChanged(self, answer=True, message=""):
-		if not answer:
-			print "[GMEPG] Something went wrong while fetching the remote timer", message
+	def onSelectionChanged(self):
 		cur = self["list"].getCurrent()
 		event = cur[0]
 		self["Event"].newEvent(event)

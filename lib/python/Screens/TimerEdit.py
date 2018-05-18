@@ -62,7 +62,7 @@ class TimerEditList(Screen):
 		self.onShown.append(self.updateState)
 		if self.isProtected() and config.ParentalControl.servicepin[0].value:
 			self.onFirstExecBegin.append(boundFunction(self.session.openWithCallback, self.pinEntered, PinInput, pinList=[x.value for x in config.ParentalControl.servicepin], triesEntry=config.ParentalControl.retries.servicepin, title=_("Please enter the correct pin code"), windowTitle=_("Enter pin code")))
-		self.fallbackTimer = FallbackTimerList(session, self.fillTimerList)
+		self.fallbackTimer = FallbackTimerList(self, self.fillTimerList)
 
 	def isProtected(self):
 		return config.ParentalControl.setuppinactive.value and (not config.ParentalControl.config_sections.main_menu.value or hasattr(self.session, 'infobar') and self.session.infobar is None) and config.ParentalControl.config_sections.timer_menu.value
@@ -211,19 +211,17 @@ class TimerEditList(Screen):
 			self["key_blue"].setText("")
 			self.key_blue_choice = self.EMPTY
 
-	def fillTimerList(self, answer=True, message=""):
-		self.list = []
-		if answer:
-			self.list.extend([(timer, False) for timer in self.fallbackTimer.list if timer.state == 3])
-			self.list.extend([(timer, True) for timer in self.fallbackTimer.list if timer.state != 3])
-		else:
-			print "[TimerEdit] Something went wrong while fetching fallback timer", message
+	def fillTimerList(self):
 
 		def eol_compare(x, y):
 			if x[0].state != y[0].state and x[0].state == RealTimerEntry.StateEnded or y[0].state == RealTimerEntry.StateEnded:
 				return cmp(x[0].state, y[0].state)
 			return cmp(x[0].begin, y[0].begin)
 
+		self.list = []
+		if self.fallbackTimer.list:
+			self.list.extend([(timer, False) for timer in self.fallbackTimer.list if timer.state == 3])
+			self.list.extend([(timer, True) for timer in self.fallbackTimer.list if timer.state != 3])
 		self.list.extend([(timer, False) for timer in self.session.nav.RecordTimer.timer_list])
 		self.list.extend([(timer, True) for timer in self.session.nav.RecordTimer.processed_timers])
 
@@ -242,7 +240,7 @@ class TimerEditList(Screen):
 	def openEdit(self):
 		cur=self["timerlist"].getCurrent()
 		if cur:
-			self.session.openWithCallback(boundFunction(self.finishedEdit, cur.service_ref, cur.begin, cur.end), TimerEntry, cur, True)
+			self.session.openWithCallback(self.finishedEdit, TimerEntry, cur, True)
 
 	def cleanupQuestion(self):
 		self.session.openWithCallback(self.cleanupTimer, MessageBox, _("Really delete done timers?"))
@@ -269,20 +267,17 @@ class TimerEditList(Screen):
 					self.session.nav.RecordTimer.removeEntry(timer)
 					self.refill()
 
-	def refill(self, answer=True, message=""):
-		if answer:
-			oldsize = len(self.list)
-			self.fillTimerList()
-			lst = self["timerlist"]
-			newsize = len(self.list)
-			if oldsize and oldsize != newsize:
-				idx = lst.getCurrentIndex()
-				lst.entryRemoved(idx)
-			else:
-				lst.invalidate()
-			self.updateState()
+	def refill(self):
+		oldsize = len(self.list)
+		self.fillTimerList()
+		lst = self["timerlist"]
+		newsize = len(self.list)
+		if oldsize and oldsize != newsize:
+			idx = lst.getCurrentIndex()
+			lst.entryRemoved(idx)
 		else:
-			print "[TimerEdit] Error fetching fallback timer", message
+			lst.invalidate()
+		self.updateState()
 
 	def addCurrentTimer(self):
 		event = None
@@ -305,12 +300,22 @@ class TimerEditList(Screen):
 	def addTimer(self, timer):
 		self.session.openWithCallback(self.finishedAdd, TimerEntry, timer)
 
-	def finishedEdit(self, service_ref, begin, end, answer):
+	def finishedEdit(self, answer):
 		print "[TimerEditList] finished edit"
 		if answer[0]:
 			entry = answer[1]
-			if entry.external:
-				self.fallbackTimer.editTimer(service_ref, begin, end, entry, self.refill)
+			if entry.external_prev != entry.external:
+				if entry.external:
+					self.fallbackTimer.addTimer(entry, boundFunction(self.removeTimer, True), self.refill)
+				else:
+					newentry = RecordTimerEntry(entry.serviceref, entry.begin, entry.end, entry.name, entry.description,\
+						entry.eit, entry.disabled, entry.justplay, entry.afterevent, dirname = entry.dirname, entry.external = False\
+						tags = entry.tags, descramble = entry.descramble, record_ecm = entry.record_ecm, always_zap = entry.always_zap,\
+						zap_wakeup = entry.zap_wakeup, rename_repeat = entry.rename_repeat, conflict_detection = entry.conflict_detection,\
+						pipzap = entry.pipzap)
+					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedAdd, (True, newentry)), self.refill)	
+			elif entry.external:
+				self.fallbackTimer.editTimer(entry, self.refill)
 			else:
 				timersanitycheck = TimerSanityCheck(self.session.nav.RecordTimer.timer_list, entry)
 				success = False
@@ -323,7 +328,7 @@ class TimerEditList(Screen):
 						if not timersanitycheck.check():
 							simulTimerList = timersanitycheck.getSimulTimerList()
 							if simulTimerList is not None:
-								self.session.openWithCallback(boundFunction(self.finishedEdit, service_ref, begin, end), TimerSanityConflict, timersanitycheck.getSimulTimerList())
+								self.session.openWithCallback(self.finishedEdit, TimerSanityConflict, timersanitycheck.getSimulTimerList())
 						else:
 							success = True
 				else:
@@ -331,7 +336,7 @@ class TimerEditList(Screen):
 				if success:
 					print "[TimerEditList] sanity check passed"
 					self.session.nav.RecordTimer.timeChanged(entry)
-			self.fillTimerList()
+				self.fillTimerList()
 
 	def finishedAdd(self, answer):
 		print "[TimerEditList] finished add"
