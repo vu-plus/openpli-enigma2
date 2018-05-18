@@ -52,9 +52,7 @@ class FallbackTimerList():
 					eit = int(timer.findtext("e2eit", -1)),
 					afterevent = int(timer.findtext("e2afterevent", 0)),
 					dirname = str(timer.findtext("e2dirname", '').encode("utf-8", 'ignore')),
-					description = str(timer.findtext("e2description", '').encode("utf-8", 'ignore')),
-					flags = "",
-					conflict_detection = 0)
+					description = str(timer.findtext("e2description", '').encode("utf-8", 'ignore')))
 			for timer in root.findall("e2timer")
 		]
 		print "[FallbackTimer] read %s timers from fallback tuner" % len(self.list)
@@ -141,7 +139,7 @@ class FallbackTimerClass(TimerObject):
 	def __init__(self, service_ref = "", name = "", disabled = 0, \
 			timebegin = 0, timeend = 0, duration = 0, startprepare = 0, \
 			state = 0, repeated = 0, justplay = 0, eit = 0, afterevent = 0, \
-			dirname = "", description = "", flags = "", conflict_detection = 0):
+			dirname = "", description = ""):
 		self.service_ref = ServiceReference(service_ref and ':'.join(service_ref.split(':')[:11]) or None)
 		self.name = name
 		self.disabled = disabled
@@ -156,9 +154,9 @@ class FallbackTimerClass(TimerObject):
 		self.afterEvent = afterevent
 		self.dirname = dirname
 		self.description = description
-		self.flags = flags
-		self.conflict_detection = conflict_detection
 
+		self.flags = ""
+		self.conflict_detection = True
 		self.external = True
 		self.always_zap = False
 		self.zap_wakeup = False
