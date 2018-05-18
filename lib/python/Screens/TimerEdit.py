@@ -305,13 +305,17 @@ class TimerEditList(Screen):
 		self.session.nav.RecordTimer.removeEntry(entry)
 		self.refill()
 
+	def moveEditTimerError(self, entry):
+		entry.external = entry.external_prev
+		self.refill()
+
 	def finishedEdit(self, answer):
 		print "[TimerEditList] finished edit"
 		if answer[0]:
 			entry = answer[1]
 			if entry.external_prev != entry.external:
 				if entry.external:
-					self.fallbackTimer.addTimer(entry, boundFunction(self.removeEditTimer, entry), self.refill)
+					self.fallbackTimer.addTimer(entry, boundFunction(self.removeEditTimer, entry), boundFunction(self.moveEditTimerError, entry))
 				else:
 					newentry = RecordTimerEntry(entry.service_ref, entry.begin, entry.end, entry.name, entry.description,\
 						entry.eit, entry.disabled, entry.justplay, entry.afterEvent, dirname = entry.dirname,\
@@ -319,7 +323,7 @@ class TimerEditList(Screen):
 						zap_wakeup = entry.zap_wakeup, rename_repeat = entry.rename_repeat, conflict_detection = entry.conflict_detection,\
 						pipzap = entry.pipzap)
 					entry.service_ref, entry.begin, entry.end = entry.service_ref_prev, entry.begin_prev, entry.end_prev
-					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedAdd, (True, newentry)), self.refill)	
+					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedAdd, (True, newentry)), boundFunction(self.moveEditTimerError, entry))
 			elif entry.external:
 				self.fallbackTimer.editTimer(entry, self.refill)
 			else:
