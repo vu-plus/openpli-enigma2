@@ -220,8 +220,8 @@ class TimerEditList(Screen):
 
 		self.list = []
 		if self.fallbackTimer.list:
-			self.list.extend([(timer, False) for timer in self.fallbackTimer.list if timer.state == 3])
-			self.list.extend([(timer, True) for timer in self.fallbackTimer.list if timer.state != 3])
+			self.list.extend([(timer, False) for timer in self.fallbackTimer.list if timer.state != 3])
+			self.list.extend([(timer, True) for timer in self.fallbackTimer.list if timer.state == 3])
 		self.list.extend([(timer, False) for timer in self.session.nav.RecordTimer.timer_list])
 		self.list.extend([(timer, True) for timer in self.session.nav.RecordTimer.processed_timers])
 
@@ -240,7 +240,7 @@ class TimerEditList(Screen):
 	def openEdit(self):
 		cur=self["timerlist"].getCurrent()
 		if cur:
-			self.session.openWithCallback(self.finishedEdit, TimerEntry, cur, True)
+			self.session.openWithCallback(self.finishedEdit, TimerEntry, cur)
 
 	def cleanupQuestion(self):
 		self.session.openWithCallback(self.cleanupTimer, MessageBox, _("Really delete done timers?"))
@@ -262,9 +262,8 @@ class TimerEditList(Screen):
 				if cur.external:
 					self.fallbackTimer.removeTimer(cur, self.refill)
 				else:
-					timer = cur
-					timer.afterEvent = AFTEREVENT.NONE
-					self.session.nav.RecordTimer.removeEntry(timer)
+					cur.afterEvent = AFTEREVENT.NONE
+					self.session.nav.RecordTimer.removeEntry(cur)
 					self.refill()
 
 	def refill(self):
@@ -300,19 +299,26 @@ class TimerEditList(Screen):
 	def addTimer(self, timer):
 		self.session.openWithCallback(self.finishedAdd, TimerEntry, timer)
 
+	def removeEditTimer(self, entry):
+		entry.service_ref, entry.begin, entry.end = entry.service_ref_prev, entry.begin_prev, entry.end_prev
+		entry.afterEvent = AFTEREVENT.NONE
+		self.session.nav.RecordTimer.removeEntry(entry)
+		self.refill()
+
 	def finishedEdit(self, answer):
 		print "[TimerEditList] finished edit"
 		if answer[0]:
 			entry = answer[1]
 			if entry.external_prev != entry.external:
 				if entry.external:
-					self.fallbackTimer.addTimer(entry, boundFunction(self.removeTimer, True), self.refill)
+					self.fallbackTimer.addTimer(entry, boundFunction(self.removeEditTimer, entry), self.refill)
 				else:
-					newentry = RecordTimerEntry(entry.serviceref, entry.begin, entry.end, entry.name, entry.description,\
-						entry.eit, entry.disabled, entry.justplay, entry.afterevent, dirname = entry.dirname, entry.external = False\
+					newentry = RecordTimerEntry(entry.service_ref, entry.begin, entry.end, entry.name, entry.description,\
+						entry.eit, entry.disabled, entry.justplay, entry.afterEvent, dirname = entry.dirname,\
 						tags = entry.tags, descramble = entry.descramble, record_ecm = entry.record_ecm, always_zap = entry.always_zap,\
 						zap_wakeup = entry.zap_wakeup, rename_repeat = entry.rename_repeat, conflict_detection = entry.conflict_detection,\
 						pipzap = entry.pipzap)
+					entry.service_ref, entry.begin, entry.end = entry.service_ref_prev, entry.begin_prev, entry.end_prev
 					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedAdd, (True, newentry)), self.refill)	
 			elif entry.external:
 				self.fallbackTimer.editTimer(entry, self.refill)

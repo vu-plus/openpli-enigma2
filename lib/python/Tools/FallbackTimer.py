@@ -1,5 +1,6 @@
 from ServiceReference import ServiceReference
 from Components.config import config
+from Screens.MessageBox import MessageBox
 from timer import TimerEntry as TimerObject
 from urllib import quote
 import xml
@@ -130,7 +131,7 @@ class FallbackTimerList():
 	def fallback(self, message=None):
 		if message:
 			self.parent.session.openWithCallback(self.fallbackNOK, MessageBox, _("Error while retreiving fallback timer information %s") % message, MessageBox.TYPE_ERROR)
-		else:	
+		else:
 			self.fallbackFunction()
 
 	def fallbackNOK(self, answer=None):
