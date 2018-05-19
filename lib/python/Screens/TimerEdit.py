@@ -5,7 +5,7 @@ from Components.config import config
 from Components.TimerList import TimerList
 from Components.TimerSanityCheck import TimerSanityCheck
 from Components.UsageConfig import preferredTimerPath
-from RecordTimer import RecordTimerEntry, parseEvent, AFTEREVENT
+from RecordTimer import RecordTimerEntry, parseEvent, AFTEREVENT, createRecordTimerEntry
 from Screen import Screen
 from Screens.ChoiceBox import ChoiceBox
 from Screens.MessageBox import MessageBox
@@ -255,7 +255,7 @@ class TimerEditList(Screen):
 		if cur:
 			self.session.openWithCallback(self.removeTimer, MessageBox, _("Do you really want to delete %s?") % (cur.name))
 
-	def removeTimer(self, result):
+	def removeTimer(self, result=True):
 		if result:
 			cur = self["timerlist"].getCurrent()
 			if cur:
@@ -299,31 +299,23 @@ class TimerEditList(Screen):
 	def addTimer(self, timer):
 		self.session.openWithCallback(self.finishedAdd, TimerEntry, timer)
 
-	def removeEditTimer(self, entry):
-		entry.service_ref, entry.begin, entry.end = entry.service_ref_prev, entry.begin_prev, entry.end_prev
-		entry.afterEvent = AFTEREVENT.NONE
-		self.session.nav.RecordTimer.removeEntry(entry)
-		self.refill()
-
-	def moveEditTimerError(self, entry):
-		entry.external = entry.external_prev
-		self.refill()
-
 	def finishedEdit(self, answer):
 		print "[TimerEditList] finished edit"
 		if answer[0]:
 			entry = answer[1]
 			if entry.external_prev != entry.external:
+				def removeEditTimer():
+					entry.service_ref, entry.begin, entry.end, entry.external = entry.service_ref_prev, entry.begin_prev, entry.end_prev, entry.external_prev
+					self.removeTimer()
+				def moveEditTimerError():
+					entry.external = entry.external_prev
+					self.refill()
 				if entry.external:
-					self.fallbackTimer.addTimer(entry, boundFunction(self.removeEditTimer, entry), boundFunction(self.moveEditTimerError, entry))
+					self.fallbackTimer.addTimer(entry, removeEditTimer, moveEditTimerError)
 				else:
-					newentry = RecordTimerEntry(entry.service_ref, entry.begin, entry.end, entry.name, entry.description,\
-						entry.eit, entry.disabled, entry.justplay, entry.afterEvent, dirname = entry.dirname,\
-						tags = entry.tags, descramble = entry.descramble, record_ecm = entry.record_ecm, always_zap = entry.always_zap,\
-						zap_wakeup = entry.zap_wakeup, rename_repeat = entry.rename_repeat, conflict_detection = entry.conflict_detection,\
-						pipzap = entry.pipzap)
+					newentry = createRecordTimerEntry(entry)
 					entry.service_ref, entry.begin, entry.end = entry.service_ref_prev, entry.begin_prev, entry.end_prev
-					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedAdd, (True, newentry)), boundFunction(self.moveEditTimerError, entry))
+					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedAdd, (True, newentry)), moveEditTimerError)
 			elif entry.external:
 				self.fallbackTimer.editTimer(entry, self.refill)
 			else:

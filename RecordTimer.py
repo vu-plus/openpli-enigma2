@@ -77,6 +77,13 @@ def checkForRecordings():
 	rec_time = NavigationInstance.instance.RecordTimer.getNextTimerTime(isWakeup=True)
 	return rec_time > 0 and (rec_time - time()) < 360
 
+def createRecordTimerEntry(timer):
+	return RecordTimerEntry(timer.service_ref, timer.begin, timer.end, timer.name, timer.description,\
+		timer.eit, timer.disabled, timer.justplay, timer.afterEvent, dirname = timer.dirname,\
+		tags = timer.tags, descramble = timer.descramble, record_ecm = timer.record_ecm, always_zap = timer.always_zap,\
+		zap_wakeup = timer.zap_wakeup, rename_repeat = timer.rename_repeat, conflict_detection = timer.conflict_detection,\
+		pipzap = timer.pipzap)
+
 # please do not translate log messages
 class RecordTimerEntry(timer.TimerEntry, object):
 ######### the following static methods and members are only in use when the box is in (soft) standby
