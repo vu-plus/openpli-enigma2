@@ -126,15 +126,18 @@ class EventViewBase:
 		if answer[0]:
 			entry = answer[1]
 			if entry.external_prev != entry.external:
+				def removeEditTimer():
+					entry.service_ref, entry.begin, entry.end, entry.external = entry.service_ref_prev, entry.begin_prev, entry.end_prev, entry.external_prev
+					self.removeTimer(entry)
+				def moveEditTimerError():
+					entry.external = entry.external_prev
+					self.onSelectionChanged()
 				if entry.external:
-					self.fallbackTimer.addTimer(entry, boundFunction(self.removeTimer, entry), self.refill)
+					self.fallbackTimer.addTimer(entry, removeEditTimer, moveEditTimerError)
 				else:
-					newentry = RecordTimerEntry(entry.serviceref, entry.begin, entry.end, entry.name, entry.description,\
-						entry.eit, entry.disabled, entry.justplay, entry.afterevent, dirname = entry.dirname, entry.external = False\
-						tags = entry.tags, descramble = entry.descramble, record_ecm = entry.record_ecm, always_zap = entry.always_zap,\
-						zap_wakeup = entry.zap_wakeup, rename_repeat = entry.rename_repeat, conflict_detection = entry.conflict_detection,\
-						pipzap = entry.pipzap)
-					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedAdd, (True, newentry)), self.refill)	
+					newentry = createRecordTimerEntry(entry)
+					entry.service_ref, entry.begin, entry.end = entry.service_ref_prev, entry.begin_prev, entry.end_prev
+					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedAdd, (True, newentry)), moveEditTimerError)
 			elif entry.external:
 				self.fallbackTimer.editTimer(entry, self.setTimerState)
 			else:
