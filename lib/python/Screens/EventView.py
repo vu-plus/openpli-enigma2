@@ -11,10 +11,11 @@ from Components.Sources.ServiceEvent import ServiceEvent
 from Components.Sources.StaticText import StaticText
 from Components.Sources.Event import Event
 from enigma import eEPGCache, eTimer, eServiceReference
-from RecordTimer import RecordTimerEntry, parseEvent, AFTEREVENT
+from RecordTimer import RecordTimerEntry, parseEvent, AFTEREVENT, createRecordTimerEntry
 from TimerEntry import TimerEntry
 from Plugins.Plugin import PluginDescriptor
 from Tools.BoundFunction import boundFunction
+from Tools.FallbackTimer import FallbackTimerList
 from time import localtime
 from Components.config import config
 
@@ -22,7 +23,7 @@ class EventViewBase:
 	ADD_TIMER = 0
 	REMOVE_TIMER = 1
 
-	def __init__(self, event, Ref, callback=None, similarEPGCB=None):
+	def __init__(self, event, Ref, callback=None, similarEPGCB=None, parent=None):
 		self.similarEPGCB = similarEPGCB
 		self.cbFunc = callback
 		self.currentService=Ref
@@ -99,7 +100,7 @@ class EventViewBase:
 		end = begin + event.getDuration()
 		refstr = ':'.join(serviceref.ref.toString().split(':')[:11])
 		isRecordEvent = False
-		for timer in self.session.nav.RecordTimer.timer_list:
+		for timer in self.session.nav.RecordTimer.getAllTimersList():
 			needed_ref = ':'.join(timer.service_ref.ref.toString().split(':')[:11]) == refstr
 			if needed_ref and timer.eit == eventid and (begin < timer.begin <= end or timer.begin <= begin <= timer.end):
 				isRecordEvent = True
@@ -254,11 +255,11 @@ class EventViewBase:
 	def setTimerState(self):
 		serviceref = self.currentService
 		eventid = self.event.getEventId()
-		begin = event.getBeginTime()
-		end = begin + event.getDuration()
+		begin = self.event.getBeginTime()
+		end = begin + self.event.getDuration()
 		refstr = ':'.join(serviceref.ref.toString().split(':')[:11])
 		isRecordEvent = False
-		for timer in self.session.nav.RecordTimer.timer_list:
+		for timer in self.session.nav.RecordTimer.getAllTimersList():
 			needed_ref = ':'.join(timer.service_ref.ref.toString().split(':')[:11]) == refstr
 			if needed_ref and (timer.eit == eventid and (begin < timer.begin <= end or timer.begin <= begin <= timer.end) or timer.repeated and self.session.nav.RecordTimer.isInRepeatTimer(timer, event)):
 				isRecordEvent = True
@@ -325,18 +326,18 @@ class EventViewBase:
 		plugin(session=self.session, service=self.currentService, event=self.event, eventName=self.event.getEventName())
 
 class EventViewSimple(Screen, EventViewBase):
-	def __init__(self, session, Event, Ref, callback=None, similarEPGCB=None):
+	def __init__(self, session, Event, Ref, callback=None, similarEPGCB=None, parent=None):
 		Screen.__init__(self, session)
 		self.skinName = "EventView"
-		EventViewBase.__init__(self, Event, Ref, callback, similarEPGCB)
+		EventViewBase.__init__(self, Event, Ref, callback, similarEPGCB, parent)
 
 class EventViewEPGSelect(Screen, EventViewBase):
-	def __init__(self, session, Event, Ref, callback=None, singleEPGCB=None, multiEPGCB=None, similarEPGCB=None):
+	def __init__(self, session, Event, Ref, callback=None, singleEPGCB=None, multiEPGCB=None, similarEPGCB=None, parent=None):
 		Screen.__init__(self, session)
 		self.skinName = "EventView"
 		self.singleEPGCB = singleEPGCB
 		self.multiEPGCB = multiEPGCB
-		EventViewBase.__init__(self, Event, Ref, callback, similarEPGCB)
+		EventViewBase.__init__(self, Event, Ref, callback, similarEPGCB, parent)
 		self["key_yellow"].setText(_("Single EPG"))
 		self["key_blue"].setText(_("Multi EPG"))
 		self["epgactions"] = ActionMap(["EventViewEPGActions"],

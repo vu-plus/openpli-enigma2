@@ -22,7 +22,7 @@ from Screens.TimerEdit import TimerSanityConflict, TimerEditList
 from Screens.MessageBox import MessageBox
 from Screens.ChoiceBox import ChoiceBox
 from Tools.Directories import resolveFilename, SCOPE_CURRENT_SKIN
-from RecordTimer import RecordTimerEntry, parseEvent, AFTEREVENT
+from RecordTimer import RecordTimerEntry, parseEvent, AFTEREVENT, createRecordTimerEntry
 from ServiceReference import ServiceReference, isPlayableForCur
 from Tools.LoadPixmap import LoadPixmap
 from Tools.Alternatives import CompareWithAlternatives
@@ -1324,7 +1324,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 					if choice[1] == "delete":
 						self.removeTimer(timer)
 					elif choice[1] == "edit":
-						self.session.openWithCallback(self.finishedEdit, TimerEntry, timer, edit=True)
+						self.session.openWithCallback(self.finishedEdit, TimerEntry, timer)
 					elif choice[1] == "disable":
 						self.disableTimer(timer, prev_state)
 					elif choice[1] == "timereditlist":
@@ -1353,7 +1353,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 				else:
 					newentry = createRecordTimerEntry(entry)
 					entry.service_ref, entry.begin, entry.end = entry.service_ref_prev, entry.begin_prev, entry.end_prev
-					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedAdd, (True, newentry)), moveEditTimerError)
+					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedTimerAdd, (True, newentry)), moveEditTimerError)
 			elif entry.external:
 				self.fallbackTimer.editTimer(entry, self.onSelectionChanged)
 			else:

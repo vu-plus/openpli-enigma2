@@ -15,13 +15,14 @@ from Screens.TimerEdit import TimerSanityConflict, TimerEditList
 from Screens.EventView import EventViewSimple
 from TimeDateInput import TimeDateInput
 from enigma import eServiceReference
-from RecordTimer import RecordTimerEntry, parseEvent, AFTEREVENT
+from RecordTimer import RecordTimerEntry, parseEvent, AFTEREVENT, createRecordTimerEntry
 from TimerEntry import TimerEntry
 from ServiceReference import ServiceReference
 from time import localtime, time
 from Components.PluginComponent import plugins
 from Plugins.Plugin import PluginDescriptor
 from Tools.BoundFunction import boundFunction
+from Tools.FallbackTimer import FallbackTimerList
 
 mepg_config_initialized = False
 
@@ -106,7 +107,7 @@ class EPGSelection(Screen):
 			self.fallbackTimer = parent.fallbackTimer
 			self.onLayoutFinish.append(self.onCreate)
 		else:
-			FallbackTimerList(self, self.onCreate)
+			self.fallbackTimer = FallbackTimerList(self, self.onCreate)
 
 	def nextBouquet(self):
 		if self.type == EPG_TYPE_SINGLE:
@@ -180,9 +181,9 @@ class EPGSelection(Screen):
 		service = cur[1]
 		if event is not None:
 			if self.type != EPG_TYPE_SIMILAR:
-				self.session.open(EventViewSimple, event, service, self.eventViewCallback, self.openSimilarList)
+				self.session.open(EventViewSimple, event, service, self.eventViewCallback, self.openSimilarList, parent=self.parent)
 			else:
-				self.session.open(EventViewSimple, event, service, self.eventViewCallback)
+				self.session.open(EventViewSimple, event, service, self.eventViewCallback, parent=self.parent)
 
 	def openSimilarList(self, eventid, refstr):
 		self.session.open(EPGSelection, refstr, None, eventid)
@@ -357,7 +358,7 @@ class EPGSelection(Screen):
 		begin = event.getBeginTime()
 		end = begin + event.getDuration()
 		refstr = ':'.join(serviceref.ref.toString().split(':')[:11])
-		for timer in self.session.nav.RecordTimer.timer_list:
+		for timer in self.session.nav.RecordTimer.getAllTimersList():
 			needed_ref = ':'.join(timer.service_ref.ref.toString().split(':')[:11]) == refstr
 			if needed_ref and timer.eit == eventid and (begin < timer.begin <= end or timer.begin <= begin <= timer.end):
 				isRecordEvent = True
@@ -434,7 +435,7 @@ class EPGSelection(Screen):
 						self.session.nav.RecordTimer.timeChanged(entry)
 				self.onSelectionChanged()
 
-	def finishedTimerAdd(self, answer):
+	def finishedAdd(self, answer):
 		print "finished add"
 		if answer[0]:
 			entry = answer[1]
@@ -560,7 +561,6 @@ class EPGSelection(Screen):
 				self["Service"].newService(None)
 			else:
 				self["Service"].newService(cur[1].ref)
-
 		if cur[1] is None or cur[1].getServiceName() == "":
 			if self.key_green_choice != self.EMPTY:
 				self["key_green"].setText("")
@@ -585,7 +585,7 @@ class EPGSelection(Screen):
 		end = begin + event.getDuration()
 		refstr = ':'.join(serviceref.ref.toString().split(':')[:11])
 		isRecordEvent = False
-		for timer in self.session.nav.RecordTimer.timer_list:
+		for timer in self.session.nav.RecordTimer.getAllTimersList():
 			needed_ref = ':'.join(timer.service_ref.ref.toString().split(':')[:11]) == refstr
 			if needed_ref and (timer.eit == eventid and (begin < timer.begin <= end or timer.begin <= begin <= timer.end) or timer.repeated and self.session.nav.RecordTimer.isInRepeatTimer(timer, event)):
 				isRecordEvent = True
@@ -598,3 +598,4 @@ class EPGSelection(Screen):
 			self.key_green_choice = self.ADD_TIMER
 		if self.parent and eventid and hasattr(self.parent, "setEvent"):
 			self.parent.setEvent(serviceref, eventid)
+		self["list"].l.invalidate()
